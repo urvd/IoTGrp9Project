@@ -3,31 +3,36 @@
 #include <EthernetClient.h>
 #include <PubSubClient.h>
 
-#define OUTPUT              (1<<3)
+#define OUTPUT              (0<<4)
 
 void setMqttClient();
 void connectMqtt();
 String levelOutputFromReadTemperatue();
-void publishVentilateurMoteur();
+void publishVentilateurMoteur(int value);
 void subscribeActionTopic();
+String payloadToString();
+void actionCallback(char * topicChar, byte* payloadByte, unsigned int length);
  
-const char * moteurTopic = "VentilateurMoteur";
-const char * capteurTempTopic = "CapteurTemperatureV";
+const char * moteurTopic = "VentilateurConnect";
+//const char * capteurTempTopic = "CapteurTempGet";
 
 Ethernet wsa;
 EthernetClient ethClient;
 PubSubClient mqttClient;
+String none ="none";
+String low = "low";
+String normal = "normal";
+String high = "high";
+
 
 void setup() {
   Serial.begin(9600);
-  pinMode(0, OUTPUT);
+  pinMode(9, OUTPUT);
   setMqttClient();
 }
 
 void loop() {
   connectMqtt();
-  publishVentilateurMoteur();
-  delay(6000);
   mqttClient.loop();
 }
 
@@ -35,75 +40,36 @@ void loop() {
 void setMqttClient(){
   mqttClient.setClient(ethClient);
   mqttClient.setServer("mqtt.flespi.io", 1883);
-  //mqttClient.setCallback(actionCallback);
+  mqttClient.setCallback(actionCallback);
 }
 
 //connection a une session (= capteur par exemple)
 void connectMqtt() {
+  if(mqttClient.connected()){
+    return;
+  }
   const char * PASSWORD = "6CxabSSDNaJLgC8xdjdrCR2PagdQ42W0shYuZHXCHubMW89YfafGR7jQbmw6eiUw";
-  Serial.println("connecting to Mqtt moteur ...");
+  Serial.println("connecting to Mqtt ventilateur ...");
   if(!mqttClient.connect(moteurTopic, PASSWORD, "")){
     Serial.println("connection failed !!");
   }else{
     Serial.println("connection succes !!");
   }
-  Serial.println("connecting to Mqtt capteur temperature ...");
-  if(!mqttClient.connect(capteurTempTopic, PASSWORD, "")){
-    Serial.println("connection failed !!");
-  }else{
-    Serial.println("connection succes !!");
-  }
+  subscribeActionTopic();
 }
 
-//ex suscribe capteur
+//ex suscribe ventilateur connect level
 void subscribeActionTopic()
 {
-  String finalTopic = "CapteurTemperatureV";
+  String finalTopic = "VentilateurConnect/level";
   if(!mqttClient.subscribe(finalTopic.c_str()))
   {
-    Serial.println("Topic led action subscribe error");
-  }
-  Serial.println("Topic led action subscribe success");
-}
-
-//Set Level From read TemperatureValue
-String levelOutputFromReadTemperatue() {
-  String level = "1";
-  return level;
-}
-
-//ex publish Ventilateur moteur
-void publishVentilateurMoteur()
-{
-  if(!mqttClient.connected())
-  {
-    Serial.println("Unable to publish ventlateurMoteur value since mqtt broker insn't connect");
-    return;
-  }
-  String finalTopic = "VentilateurMoteur/level";
-  if(!mqttClient.publish(finalTopic.c_str(), levelOutputFromReadTemperatue().c_str() ))
-  {
-    Serial.println("Unable to publish ventilateur moteur value..");
+    Serial.println("Topic ventilateur level subscribe error");
   }else{
-    Serial.println("Ventilateur moteur value published ");
+    Serial.println("Topic ventilateur level subscribe success");
   }
 }
 
-// void switchLed(bool on)
-// {
-//   if(on)
-//   {
-//     digitalWrite(LED_PIN, 1);
-//   }
-//   else
-//   {
-//     digitalWrite(LED_PIN, 0);
-//   }
-//   if(!mqttClient.publish(ledStateTopic.c_str(), String(on).c_str()))
-//   {
-//     Serial.println("Unable to publish led state value..");
-//   }
-// }
 
 String payloadToString(byte *payload, unsigned int length)
 {
@@ -112,11 +78,13 @@ String payloadToString(byte *payload, unsigned int length)
   return String(buffer);
 }
 
+// suscribe callback
 void actionCallback(char * topicChar, byte* payloadByte, unsigned int length)
 {
   Serial.println("New message received");
   String topic = String(topicChar);
   String payload = payloadToString(payloadByte, length);
+  int payloadInt = payload.toInt();
 
   Serial.print("Topic: ");
   Serial.println(topic);
@@ -124,17 +92,20 @@ void actionCallback(char * topicChar, byte* payloadByte, unsigned int length)
   Serial.print("Payload: ");
   Serial.println(payload);
 
-  // if(!topic.equals("ee"))
-  // {
-  //   return;
-  // }
-  // bool a;
-  // if(payload.equalsIgnoreCase("on"))
-  // {
-  //   //switchLed(true);
-  // }
-  // else if(payload.equalsIgnoreCase("off"))
-  // {
-  //   //switchLed(false);
-  // }
+  if(!topic.equals("VentilateurConnect/level"))
+  {
+    return;
+  }else{
+    if(payloadInt == 1) {
+      digitalWrite(9, 1);
+    }else if(payloadInt == 2){
+      digitalWrite(9, 2);
+    }else if(payloadInt == 3){
+      digitalWrite(9, 3);
+    }else if(payloadInt == 4){
+      digitalWrite(9, 4);
+    }else{
+      digitalWrite(9, 0);
+    }
+  }
 }
